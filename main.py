@@ -16,13 +16,20 @@ class FileVisitor:
 
 
 class FileSizeVisitor(FileVisitor):
-    def __init__(self):
+    def __init__(self, large_file_threshold=1000000):  # default threshold: 100 MB
         self.file_sizes = {}
+        self.total_size = 0
+        self.large_files = []
+        self.large_file_threshold = large_file_threshold
 
     def visit_file(self, file):
         try:
             size = os.path.getsize(file.path)
             self.file_sizes[file.path] = size
+            self.total_size += size
+
+            if size > self.large_file_threshold:
+                self.large_files.append((file.path, size))
         except OSError as e:
             print(f"Error reading size of {file.path}: {e}")
 
@@ -30,8 +37,12 @@ class FileSizeVisitor(FileVisitor):
         pass
     
     def get_result(self):
-        return self.file_sizes
-    
+        return {
+            'total_size': self.total_size,
+            # 'file_sizes': self.file_sizes,
+            'large_files': self.large_files
+        }
+
 
 class PermissionVisitor(FileVisitor):
     def __init__(self):
