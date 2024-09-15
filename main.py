@@ -1,8 +1,11 @@
 import os
 import mimetypes
 import stat
-import pprint
+import logging
+from typing import List, Dict
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 class FileVisitor:
     def visit_file(self, file):
@@ -10,7 +13,7 @@ class FileVisitor:
 
     def visit_directory(self, directory):
         raise NotImplementedError("visit_directory not implemented")
-    
+
     def get_result(self):
         raise NotImplementedError("get_result not implemented")
 
@@ -31,11 +34,11 @@ class FileSizeVisitor(FileVisitor):
             if size > self.large_file_threshold:
                 self.large_files.append((file.path, size))
         except OSError as e:
-            print(f"Error reading size of {file.path}: {e}")
+            logging.error(f"Error reading size of {file.path}: {e}")
 
     def visit_directory(self, directory):
         pass
-    
+
     def get_result(self):
         return {
             'total_size': self.total_size,
@@ -53,11 +56,11 @@ class PermissionVisitor(FileVisitor):
             if os.stat(file.path).st_mode & stat.S_IWOTH:
                 self.writable_files.append(file.path)
         except OSError as e:
-            print(f"Error checking permissions of {file.path}: {e}")
+            logging.error(f"Error checking permissions of {file.path}: {e}")
 
     def visit_directory(self, directory):
         pass
-    
+
     def get_result(self):
         return self.writable_files
 
@@ -80,7 +83,6 @@ class FileCategoryVisitor(FileVisitor):
                     category = 'Executable'
                 else:
                     category = 'Other'
-                self.file_categories[file.path] = category
             else:
                 _, file_extension = os.path.splitext(file.path)
                 category = file_extension[1:].capitalize() if file_extension else 'Unknown'
@@ -89,7 +91,7 @@ class FileCategoryVisitor(FileVisitor):
                 self.file_categories[category] = 0
             self.file_categories[category] += 1
         except OSError as e:
-            print(f"Error checking category of {file.path}: {e}")
+            logging.error(f"Error checking category of {file.path}: {e}")
 
     def visit_directory(self, directory):
         pass
@@ -114,7 +116,6 @@ class File(FileSystemElement):
 class Directory(FileSystemElement):
     def __init__(self, path):
         self.path = path
-        # both, files and directories
         self.contents = []
 
     def accept(self, visitor):
@@ -128,6 +129,8 @@ class Directory(FileSystemElement):
 
 class DirectoryAnalyzer:
     def __init__(self, directory_path):
+        if not os.path.isdir(directory_path):
+            raise ValueError(f"Provided path is not a valid directory: {directory_path}")
         self.root_directory = Directory(directory_path)
         self._build_directory_structure(self.root_directory)
 
@@ -140,22 +143,57 @@ class DirectoryAnalyzer:
                 directory.add_content(sub_dir)
                 self._build_directory_structure(sub_dir)
 
-    def analyze(self, visitors):
+    def analyze(self, visitors: List[FileVisitor]) -> Dict[str, dict]:
+        results = {}
         for visitor in visitors:
-            self.root_directory.accept(visitor)
-        # Return the visitors' results
-        return {visitor.__class__.__name__: visitor.get_result() for visitor in visitors}
+            visitor_result = self.root_directory.accept(visitor)
+            results[visitor.__class__.__name__] = visitor.get_result()
+        return results
+
+def log_analysis_results(results: Dict[str, dict]):
+    logging.info("Analysis Results:")
+
+    # FileSizeVisitor results
+    size_results = results.get('FileSizeVisitor', {})
+    logging.info(f"Total Size: {size_results.get('total_size', 0)} bytes")
+    large_files = size_results.get('large_files', [])
+    if large_files:
+        logging.info("Large Files:")
+        for file_path, size in large_files:
+            logging.info(f"  {file_path}: {size} bytes")
+    else:
+        logging.info("No large files detected.")
+
+    # PermissionVisitor results
+    permission_results = results.get('PermissionVisitor', [])
+    if permission_results:
+        logging.info("Writable Files:")
+        for file_path in permission_results:
+            logging.info(f"  {file_path}")
+    else:
+        logging.info("No writable files detected.")
+
+    # FileCategoryVisitor results
+    category_results = results.get('FileCategoryVisitor', {})
+    logging.info("File Categories:")
+    for category, count in category_results.items():
+        logging.info(f"  {category}: {count} files")
+
 
 if __name__ == "__main__":
-    directory_to_analyze = "/home/tamar/Work/Cloudlinux/file_system_analyzer"
+    directory_to_analyze = "/home/tamar/Work/cloudlinux/file_system_analyzer"
 
-    analyzer = DirectoryAnalyzer(directory_to_analyze)
+    try:
+        analyzer = DirectoryAnalyzer(directory_to_analyze)
+    except ValueError as e:
+        logging.error(e)
+        exit(1)
 
-    size_visitor = FileSizeVisitor()
+    size_visitor = FileSizeVisitor(large_file_threshold=50000000)  # Set threshold to 50 MB
     permission_visitor = PermissionVisitor()
     category_visitor = FileCategoryVisitor()
 
     visitors = [size_visitor, permission_visitor, category_visitor]
     results = analyzer.analyze(visitors)
 
-    pprint.pprint(results)
+    log_analysis_results(results)
