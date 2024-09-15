@@ -2,6 +2,7 @@ import os
 import mimetypes
 import stat
 import logging
+import argparse
 from typing import List, Dict
 
 # Configure logging
@@ -180,9 +181,7 @@ def log_analysis_results(results: Dict[str, dict]):
         logging.info(f"  {category}: {count} files")
 
 
-if __name__ == "__main__":
-    directory_to_analyze = "/home/tamar/Work/cloudlinux/file_system_analyzer"
-
+def main(directory_to_analyze: str):
     try:
         analyzer = DirectoryAnalyzer(directory_to_analyze)
     except ValueError as e:
@@ -197,3 +196,11 @@ if __name__ == "__main__":
     results = analyzer.analyze(visitors)
 
     log_analysis_results(results)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Analyze file system directory.")
+    parser.add_argument("path", type=str, help="Path to the directory to analyze")
+    args = parser.parse_args()
+
+    main(args.path)
