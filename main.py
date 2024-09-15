@@ -4,6 +4,7 @@ import stat
 import logging
 import argparse
 from typing import List, Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -135,6 +136,14 @@ class DirectoryAnalyzer:
         self.root_directory = Directory(directory_path)
         self._build_directory_structure(self.root_directory)
 
+    def _lazy_traverse_directory(self, directory_path: str):
+        for entry in os.scandir(directory_path):
+            if entry.is_file():
+                yield File(entry.path)
+            elif entry.is_dir():
+                yield from self._lazy_traverse_directory(entry.path)
+                yield Directory(entry.path)
+
     def _build_directory_structure(self, directory):
         for entry in os.scandir(directory.path):
             if entry.is_file():
@@ -144,12 +153,22 @@ class DirectoryAnalyzer:
                 directory.add_content(sub_dir)
                 self._build_directory_structure(sub_dir)
 
-    def analyze(self, visitors: List[FileVisitor]) -> Dict[str, dict]:
-        results = {}
+    def analyze(self, visitors: List[FileVisitor], max_workers: int = 4) -> Dict[str, dict]:
+        results = {visitor.__class__.__name__: visitor for visitor in visitors}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(self._process_file, file, visitors)
+                       for file in self._lazy_traverse_directory(self.root_directory.path)
+                       if isinstance(file, File)]
+            
+            for file in as_completed(futures):
+                file.result()
+
+        return {name: visitor.get_result() for name, visitor in results.items()}
+
+    def _process_file(self, file, visitors: List[FileVisitor]):
         for visitor in visitors:
-            visitor_result = self.root_directory.accept(visitor)
-            results[visitor.__class__.__name__] = visitor.get_result()
-        return results
+            file.accept(visitor)
 
 def log_analysis_results(results: Dict[str, dict]):
     logging.info("Analysis Results:")
