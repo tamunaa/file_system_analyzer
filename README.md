@@ -66,8 +66,6 @@ The File System Analyzer is a Python application designed to analyze file system
 
 ## Extensions and Improvements
 
-There are several potential extensions and improvements that can enhance the functionality, scalability, and usability of this directory analysis tool:
-
 ### 1. Add More Visitors
 - **File Age Visitor**: Create a visitor that categorizes or flags files based on their creation or modification time (e.g., files older than X days).
 - **File Type Analysis**: Implement a visitor that detects specific file types (e.g., audio, archive files) based on extensions or file content, allowing deeper categorization.
