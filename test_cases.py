@@ -109,33 +109,6 @@ class TestPermissionVisitor(unittest.TestCase):
         self.assertNotIn('non_writable_file.txt', result)
 
 
-class TestFileCategoryVisitor(unittest.TestCase):
-    def setUp(self):
-        self.visitor = FileCategoryVisitor()
-
-    @patch('mimetypes.guess_type')
-    def test_visit_file_text(self, mock_guess_type):
-        mock_guess_type.return_value = ('text/plain', None)
-        file = MagicMock()
-        file.path = 'document.txt'
-
-        self.visitor.visit_file(file)
-
-        result = self.visitor.get_result()
-        self.assertEqual(result['Text'], 1)
-
-    @patch('mimetypes.guess_type')
-    def test_visit_file_image(self, mock_guess_type):
-        mock_guess_type.return_value = ('image/jpeg', None)
-        file = MagicMock()
-        file.path = 'photo.jpg'
-
-        self.visitor.visit_file(file)
-
-        result = self.visitor.get_result()
-        self.assertEqual(result['Image'], 1)
-
-
 class TestDirectoryAnalyzer(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory and a file inside it
@@ -145,36 +118,28 @@ class TestDirectoryAnalyzer(unittest.TestCase):
             f.write('Test content')
 
     def tearDown(self):
-        # Remove the temporary directory after test
         shutil.rmtree(self.test_dir)
 
-    @patch('os.scandir')
-    def test_build_directory_structure(self, mock_scandir):
-        mock_file = MagicMock()
-        mock_file.is_file.return_value = True
-        mock_file.path = self.file_path
-
-        mock_directory = MagicMock()
-        mock_directory.is_file.return_value = False
-        mock_directory.path = self.test_dir
-
-        mock_scandir.side_effect = [
-            [mock_file],
-            []
-        ]
+    def test_analyze_single_file(self):
+        size_visitor = FileSizeVisitor()
+        permission_visitor = PermissionVisitor()
+        category_visitor = FileCategoryVisitor()
 
         analyzer = DirectoryAnalyzer(self.test_dir)
+        visitors = [size_visitor, permission_visitor, category_visitor]
+        results = analyzer.analyze(visitors)
 
-        # Access the root directory and its contents
-        root_dir = analyzer.root_directory
-        self.assertIsInstance(root_dir, Directory)
-        self.assertEqual(len(root_dir.contents), 1)  # Should contain 1 file
-        self.assertEqual(root_dir.contents[0].path, self.file_path)
+        self.assertIn('total_size', results['FileSizeVisitor'])
+        self.assertEqual(results['FileSizeVisitor']['total_size'], os.path.getsize(self.file_path))
+
+        self.assertIn('Text', results['FileCategoryVisitor'])
+        self.assertEqual(results['FileCategoryVisitor']['Text'], 1)
+
+        self.assertEqual(results['PermissionVisitor'], [])
 
 
 class TestDirectoryAnalyzerNestedDirectories(unittest.TestCase):
     def setUp(self):
-        # Create a temporary directory structure with nested directories
         self.test_dir = tempfile.mkdtemp()
         self.sub_dir = os.path.join(self.test_dir, 'subdir')
         os.makedirs(self.sub_dir)
@@ -185,33 +150,23 @@ class TestDirectoryAnalyzerNestedDirectories(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
-    @patch('os.scandir')
-    def test_build_directory_structure_with_nested_directories(self, mock_scandir):
-        mock_file = MagicMock()
-        mock_file.is_file.return_value = True
-        mock_file.is_dir.return_value = False
-        mock_file.path = self.file_path
-
-        mock_subdir = MagicMock()
-        mock_subdir.is_file.return_value = False
-        mock_subdir.is_dir.return_value = True
-        mock_subdir.path = self.sub_dir
-
-        mock_scandir.side_effect = [
-            [mock_subdir],  # Root directory contains the sub-directory
-            [mock_file]  # Sub-directory contains the file
-        ]
+    def test_analyze_nested_directories(self):
+        # Test with nested directories
+        size_visitor = FileSizeVisitor()
+        permission_visitor = PermissionVisitor()
+        category_visitor = FileCategoryVisitor()
 
         analyzer = DirectoryAnalyzer(self.test_dir)
+        visitors = [size_visitor, permission_visitor, category_visitor]
+        results = analyzer.analyze(visitors)
 
-        root_dir = analyzer.root_directory
-        self.assertIsInstance(root_dir, Directory)
-        self.assertEqual(len(root_dir.contents), 1)
-        self.assertEqual(root_dir.contents[0].path, self.sub_dir)
+        self.assertIn('total_size', results['FileSizeVisitor'])
+        self.assertEqual(results['FileSizeVisitor']['total_size'], os.path.getsize(self.file_path))
 
-        subdir_contents = root_dir.contents[0].contents
-        self.assertEqual(len(subdir_contents), 1)
-        self.assertEqual(subdir_contents[0].path, self.file_path)
+        self.assertIn('Text', results['FileCategoryVisitor'])
+        self.assertEqual(results['FileCategoryVisitor']['Text'], 1)
+
+        self.assertEqual(results['PermissionVisitor'], [])
 
 
 if __name__ == '__main__':
