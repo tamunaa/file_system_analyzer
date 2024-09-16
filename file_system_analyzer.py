@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
+
 class FileVisitor:
     def visit_file(self, file):
         raise NotImplementedError("visit_file not implemented")
@@ -150,7 +151,7 @@ class DirectoryAnalyzer:
             futures = [executor.submit(self._process_file, file, visitors)
                        for file in self._lazy_traverse_directory(self.root_directory.path)
                        if isinstance(file, File)]
-            
+
             for file in as_completed(futures):
                 file.result()
 
@@ -159,6 +160,7 @@ class DirectoryAnalyzer:
     def _process_file(self, file, visitors: List[FileVisitor]):
         for visitor in visitors:
             file.accept(visitor)
+
 
 def log_analysis_results(results: Dict[str, dict]):
     logging.info("Analysis Results:")
