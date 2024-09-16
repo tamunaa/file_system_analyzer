@@ -134,7 +134,6 @@ class DirectoryAnalyzer:
         if not os.path.isdir(directory_path):
             raise ValueError(f"Provided path is not a valid directory: {directory_path}")
         self.root_directory = Directory(directory_path)
-        self._build_directory_structure(self.root_directory)
 
     def _lazy_traverse_directory(self, directory_path: str):
         for entry in os.scandir(directory_path):
@@ -143,15 +142,6 @@ class DirectoryAnalyzer:
             elif entry.is_dir():
                 yield from self._lazy_traverse_directory(entry.path)
                 yield Directory(entry.path)
-
-    def _build_directory_structure(self, directory):
-        for entry in os.scandir(directory.path):
-            if entry.is_file():
-                directory.add_content(File(entry.path))
-            elif entry.is_dir():
-                sub_dir = Directory(entry.path)
-                directory.add_content(sub_dir)
-                self._build_directory_structure(sub_dir)
 
     def analyze(self, visitors: List[FileVisitor], max_workers: int = 4) -> Dict[str, dict]:
         results = {visitor.__class__.__name__: visitor for visitor in visitors}
